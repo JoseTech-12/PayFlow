@@ -20,11 +20,11 @@
 
 ## 👥 Integrantes
 
-| Nombre | 
-|---|---|
-| Jose Luis Parra | 
-| Isaac Gomez | 
-| Emerson raul |  
+| Nombre |
+|---|
+| Jose Luis Parra |
+| Isaac Gomez |
+| Emerson raul |
 
 
 ---
