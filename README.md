@@ -149,6 +149,66 @@ El diagrama C1 representa los actores principales y sistemas externos que intera
 
 ![C1](assets/c1-contexto.png)
 
+El siguiente diagrama corresponde al C4 Model – Nivel 1 (System Context Diagram) de PayFlow, una plataforma de procesamiento de pagos digitales orientada a eventos y desplegada sobre Azure.
+
+El objetivo principal del sistema es permitir a los comercios recibir pagos digitales de manera segura, escalable y eficiente en países como Colombia, Ecuador y Perú.
+
+En este nivel de arquitectura se muestran los actores y sistemas externos que interactúan con PayFlow, así como las relaciones principales entre ellos.
+
+Actores del sistema
+Comercio
+
+Representa a los establecimientos o negocios que utilizan la plataforma PayFlow para recibir pagos digitales de sus clientes.
+Los comercios envían solicitudes de procesamiento de pagos y reciben confirmaciones de transacciones autorizadas.
+
+Equipo de Riesgo
+
+Área encargada de supervisar transacciones sospechosas, alertas de fraude y comportamientos inusuales dentro de la plataforma.
+Interactúa con PayFlow para monitorear eventos relacionados con seguridad y prevención de fraude.
+
+Equipo de Operaciones
+
+Responsable de garantizar la disponibilidad y correcto funcionamiento de la plataforma.
+Monitorea métricas operativas, incidentes y el procesamiento de transacciones en tiempo real.
+
+Sistema principal
+PayFlow
+
+Plataforma central de procesamiento de pagos digitales basada en una arquitectura orientada a eventos sobre Azure.
+
+Sus principales responsabilidades incluyen:
+
+Procesar transacciones digitales.
+Gestionar autorizaciones de pago.
+Publicar eventos de transacciones.
+Integrarse con redes de pago y adquirentes bancarios.
+Garantizar escalabilidad, resiliencia y disponibilidad del servicio.
+Sistemas externos
+Terminal POS
+
+Dispositivo utilizado en comercios para capturar la información de pago del cliente y enviar solicitudes de transacción hacia PayFlow.
+
+Sistema Legado
+
+Sistema monolítico existente que continúa operando durante el proceso de migración hacia la nueva arquitectura basada en eventos.
+Permite mantener compatibilidad e integración gradual sin afectar la operación del negocio.
+
+Redes de Pago (Visa, Mastercard, PSE)
+
+Servicios externos encargados de autorizar o rechazar transacciones digitales según las validaciones financieras correspondientes.
+
+Adquirente Bancario
+
+Entidad financiera responsable de validar, procesar y liquidar las transacciones monetarias asociadas a los pagos digitales.
+
+Relaciones principales
+Los comercios utilizan PayFlow para procesar pagos digitales.
+Los terminales POS envían solicitudes de transacción hacia PayFlow.
+PayFlow se integra con redes de pago para solicitar autorizaciones.
+Las redes de pago retornan respuestas de aprobación o rechazo.
+El adquirente bancario realiza validaciones financieras y liquidaciones.
+El sistema legado continúa intercambiando eventos y datos durante la transición tecnológica.
+Los equipos de riesgo y operaciones monitorean continuamente el comportamiento y estado de la plataforma.
 ---
 
 # C2 — Contenedores
@@ -170,6 +230,12 @@ El diagrama C2 representa los principales contenedores del sistema y el flujo ge
 ---
 
 ![C2](assets/c2-contenedores.png)
+
+El diagrama C2 representa la nueva arquitectura de procesamiento de eventos de PayFlow a nivel de contenedores. El flujo inicia en el sistema legado, que continúa funcionando durante la fase piloto y publica eventos de transacción hacia la nueva arquitectura mediante HTTP/AMQP. Estos eventos son recibidos por el ingestor de transacciones, encargado de actuar como punto de entrada y buffer para desacoplar el monolito del nuevo procesamiento.
+
+Luego, el procesador de pagos consume los eventos, valida la información, aplica reglas antifraude básicas, clasifica las transacciones por monto y registra los resultados. Cuando una transacción requiere tratamiento especial, como las mayores a $5M COP, se envía al gestor de alta prioridad, donde se manejan colas asíncronas para priorización, auditoría obligatoria y notificaciones desacopladas del flujo de autorización.
+
+El almacén de transacciones conserva el estado final, trazabilidad, auditoría y datos operativos de cada transacción procesada. Finalmente, el módulo de observabilidad recibe métricas, trazas, errores y alertas de los demás contenedores, permitiendo monitorear throughput, latencia, disponibilidad y posibles anomalías antes de que afecten a los comercios.
 
 ---
 
