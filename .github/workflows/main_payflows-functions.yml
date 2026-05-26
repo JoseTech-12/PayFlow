@@ -30,6 +30,13 @@ jobs:
           cd src
           pip install -r requirements.txt
 
+      - name: Install dependencies
+        run: |
+          # Entramos a la carpeta donde está tu proyecto real
+          cd src
+          # Instalamos las dependencias directamente en la carpeta destino para que viajen a Azure
+          pip install --target=".python_packages/lib/site-packages" -r requirements.txt
+
       - name: Azure Login
         uses: azure/login@v2
         with:
@@ -41,4 +48,5 @@ jobs:
         uses: Azure/functions-action@v1
         with:
           app-name: 'payflows-functions'
-          package: './src'
+          package: './src'  # Esto subirá todo lo que está dentro de src, incluyendo .python_packages
+          scm-do-build: false # Le decimos a Azure que nosotros ya armamos el paquete de dependencias con éxito
