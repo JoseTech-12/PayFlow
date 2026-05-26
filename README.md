@@ -231,6 +231,12 @@ El diagrama C2 representa los principales contenedores del sistema y el flujo ge
 
 ![C2](assets/c2-contenedores.png)
 
+El diagrama C2 representa la nueva arquitectura de procesamiento de eventos de PayFlow a nivel de contenedores. El flujo inicia en el sistema legado, que continúa funcionando durante la fase piloto y publica eventos de transacción hacia la nueva arquitectura mediante HTTP/AMQP. Estos eventos son recibidos por el ingestor de transacciones, encargado de actuar como punto de entrada y buffer para desacoplar el monolito del nuevo procesamiento.
+
+Luego, el procesador de pagos consume los eventos, valida la información, aplica reglas antifraude básicas, clasifica las transacciones por monto y registra los resultados. Cuando una transacción requiere tratamiento especial, como las mayores a $5M COP, se envía al gestor de alta prioridad, donde se manejan colas asíncronas para priorización, auditoría obligatoria y notificaciones desacopladas del flujo de autorización.
+
+El almacén de transacciones conserva el estado final, trazabilidad, auditoría y datos operativos de cada transacción procesada. Finalmente, el módulo de observabilidad recibe métricas, trazas, errores y alertas de los demás contenedores, permitiendo monitorear throughput, latencia, disponibilidad y posibles anomalías antes de que afecten a los comercios.
+
 ---
 
 # C3 — Componentes
