@@ -30,11 +30,13 @@ jobs:
           cd src
           pip install -r requirements.txt
 
-      - name: Install dependencies
+    - name: Install dependencies
         run: |
-          # Entramos a la carpeta donde está tu proyecto real
           cd src
-          # Instalamos las dependencias directamente en la carpeta destino para que viajen a Azure
+          # 1. Creamos la estructura de carpetas exacta que busca Azure para Python 3.11
+          mkdir -p .python_packages/lib/site-packages
+          
+          # 2. Instalamos las dependencias apuntando a esa carpeta destino específica
           pip install --target=".python_packages/lib/site-packages" -r requirements.txt
 
       - name: Azure Login
