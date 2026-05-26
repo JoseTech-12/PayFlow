@@ -70,8 +70,9 @@ def validarTransaccion(azeventhub: func.EventHubEvent):
     except Exception as e:
         logging.error(f"❌ Error al guardar en Cosmos DB: {e}")
 
-    # =========================
-    # ENVIAR A SERVICE BUS
+  
+   # =========================
+    # ENVIAR A SERVICE BUS (Optimizado)
     # =========================
     if sospechosa:
         if not SERVICE_BUS_CONNECTION:
@@ -79,13 +80,12 @@ def validarTransaccion(azeventhub: func.EventHubEvent):
             return
             
         try:
-            servicebus_client = ServiceBusClient.from_connection_string(conn_str=SERVICE_BUS_CONNECTION)
-            with servicebus_client:
-                sender = servicebus_client.get_queue_sender(queue_name=QUEUE_NAME)
-                with sender:
+            # Creamos todo el cliente dentro del bloque WITH para forzar el vaciado del buffer (flush)
+            with ServiceBusClient.from_connection_string(conn_str=SERVICE_BUS_CONNECTION) as servicebus_client:
+                with servicebus_client.get_queue_sender(queue_name=QUEUE_NAME) as sender:
                     message = ServiceBusMessage(json.dumps(transaction))
                     sender.send_messages(message)
-                    logging.info("⚠️ Alerta: Transacción de alta prioridad enviada a Service Bus.")
+                    logging.info(f"⚠️ Alerta: Transacción {transaction['id']} enviada a Service Bus.")
         except Exception as e:
             logging.error(f"❌ Error al enviar mensaje a Service Bus: {e}")
 
