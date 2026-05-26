@@ -28,8 +28,9 @@ jobs:
       - name: Install dependencies
         run: |
           cd src
-          mkdir -p .python_packages/lib/python3.11/site-packages
-          pip install --target=".python_packages/lib/python3.11/site-packages" -r requirements.txt
+          # Instalamos las dependencias directamente en la raíz de la carpeta src
+          # usando el formato estándar que el entorno de Linux de Azure reconoce
+          pip install --target=".python_packages/lib/site-packages" -r requirements.txt
 
       - name: Azure Login
         uses: azure/login@v2
@@ -43,4 +44,4 @@ jobs:
         with:
           app-name: 'payflows-functions'
           package: './src'
-          scm-do-build: false
+          scm-do-build: false  # 👈 FALSO, porque ya las instalamos arriba en la carpeta .python_packages
