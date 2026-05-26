@@ -8,7 +8,7 @@ import os
 app = func.FunctionApp()
 
 # =========================
-# CONFIGURACIONES (Nombres de colas y contenedores)
+# CONFIGURACIONES
 # =========================
 QUEUE_NAME = "high-priority-transactions"
 DATABASE_NAME = "payflowdb"
@@ -23,7 +23,6 @@ CONTAINER_NAME = "transactions"
     connection="EventHubConnectionString"
 )
 def validarTransaccion(azeventhub: func.EventHubEvent):
-    # 1. Recuperar cadenas de conexión de forma segura DENTRO de la ejecución
     COSMOS_CONNECTION = os.getenv("CosmosDBConnection")
     SERVICE_BUS_CONNECTION = os.getenv("ServiceBusConnection")
     
@@ -38,8 +37,9 @@ def validarTransaccion(azeventhub: func.EventHubEvent):
     monto = data["monto"]
 
     # =========================
-    # REGLA ANTIFRAUDE
+    # REGLA ANTIFRAUDE (Ajustada para pruebas)
     # =========================
+    # Si vas a mandar montos pequeños en tus pruebas, baja este límite temporalmente a 1000
     if monto > 5000000:
         prioridad = "ALTA"
         sospechosa = True
@@ -59,7 +59,7 @@ def validarTransaccion(azeventhub: func.EventHubEvent):
     }
 
     # =========================
-    # GUARDAR EN COSMOS DB (Conexión segura)
+    # GUARDAR EN COSMOS DB
     # =========================
     try:
         cosmos_client = CosmosClient.from_connection_string(COSMOS_CONNECTION)
@@ -70,24 +70,23 @@ def validarTransaccion(azeventhub: func.EventHubEvent):
     except Exception as e:
         logging.error(f"❌ Error al guardar en Cosmos DB: {e}")
 
-  
-   # =========================
-    # ENVIAR A SERVICE BUS (Optimizado)
+    # =========================
+    # ENVIAR A SERVICE BUS (Estructura robusta con Autoflush)
     # =========================
     if sospechosa:
         if not SERVICE_BUS_CONNECTION:
-            logging.error("❌ Transacción sospechosa detectada, pero 'ServiceBusConnection' no está configurada.")
+            logging.error("❌ Transacción sospechosa detectada, pero 'ServiceBusConnection' no existe.")
             return
             
         try:
-            # Creamos todo el cliente dentro del bloque WITH para forzar el vaciado del buffer (flush)
-            with ServiceBusClient.from_connection_string(conn_str=SERVICE_BUS_CONNECTION) as servicebus_client:
-                with servicebus_client.get_queue_sender(queue_name=QUEUE_NAME) as sender:
+            # Forzamos a que el cliente y el remitente compartan el ciclo de vida de forma estricta
+            with ServiceBusClient.from_connection_string(SERVICE_BUS_CONNECTION) as client:
+                with client.get_queue_sender(queue_name=QUEUE_NAME) as sender:
                     message = ServiceBusMessage(json.dumps(transaction))
                     sender.send_messages(message)
-                    logging.info(f"⚠️ Alerta: Transacción {transaction['id']} enviada a Service Bus.")
+                    logging.info(f"🚀 Alerta enviada con éxito a Service Bus para ID: {transaction['id']}")
         except Exception as e:
-            logging.error(f"❌ Error al enviar mensaje a Service Bus: {e}")
+            logging.error(f"❌ Error crítico al enviar a Service Bus: {e}")
 
 
 # =========================
@@ -102,5 +101,5 @@ def notificarComercio(mensaje: func.ServiceBusMessage):
     body = mensaje.get_body().decode('utf-8')
     data = json.loads(body)
 
-    logging.info(f"🔔 Webhook enviado al comercio {data['comercio_id']}")
-    logging.info(f"✅ Transacción {data['transaction_id']} notificada correctamente.")
+    logging.info(f"🔔 Webhook enviado al comercio {data.get('comercio_id')}")
+    logging.info(f"✅ Transacción {data.get('transaction_id')} notificada correctamente.")
