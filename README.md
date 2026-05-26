@@ -149,66 +149,58 @@ El diagrama C1 representa los actores principales y sistemas externos que intera
 
 ![C1](assets/c1-contexto.png)
 
-El siguiente diagrama corresponde al C4 Model – Nivel 1 (System Context Diagram) de PayFlow, una plataforma de procesamiento de pagos digitales orientada a eventos y desplegada sobre Azure.
+## C1 — Contexto
 
-El objetivo principal del sistema es permitir a los comercios recibir pagos digitales de manera segura, escalable y eficiente en países como Colombia, Ecuador y Perú.
+### Descripción del Escenario de Contexto
 
-En este nivel de arquitectura se muestran los actores y sistemas externos que interactúan con PayFlow, así como las relaciones principales entre ellos.
+El diagrama de Contexto del Sistema (Nivel 1) delimita las fronteras operacionales de la plataforma **PayFlow**, identificando de forma explícita a los actores humanos y a los sistemas externos que interactúan con el ecosistema de procesamiento de eventos distribuidos sobre la infraestructura de nube.
 
-Actores del sistema
-Comercio
+El objetivo central de la plataforma es proveer un canal seguro, altamente escalable y elástico que faculte a los comercios para la recepción y autorización de pagos digitales eficientes dentro de la región (Colombia, Ecuador y Perú), garantizando interoperabilidad táctica tanto con infraestructuras legadas como con redes financieras tradicionales.
 
-Representa a los establecimientos o negocios que utilizan la plataforma PayFlow para recibir pagos digitales de sus clientes.
-Los comercios envían solicitudes de procesamiento de pagos y reciben confirmaciones de transacciones autorizadas.
+---
 
-Equipo de Riesgo
+### Entidades y Actores Identificados
 
-Área encargada de supervisar transacciones sospechosas, alertas de fraude y comportamientos inusuales dentro de la plataforma.
-Interactúa con PayFlow para monitorear eventos relacionados con seguridad y prevención de fraude.
+#### Actores del Sistema
 
-Equipo de Operaciones
+| Actor | Alcance y Frontera Operativa |
+| :--- | :--- |
+| **Comercio** | Establecimientos comerciales y negocios afiliados que consumen los servicios de la plataforma para procesar los cobros digitales de sus clientes, emitiendo solicitudes de autorización y recibiendo notificaciones asíncronas de conformidad. |
+| **Equipo de Riesgo** | Unidad interna encargada de la gobernanza de seguridad, supervisión de transacciones anómalas, gestión de alertas de fraude financiero y auditoría de comportamiento transaccional dentro del sistema. |
+| **Equipo de Operaciones** | Responsables de la administración de la infraestructura y de velar por la alta disponibilidad de la solución mediante el monitoreo de métricas operativas y trazas lógicas en tiempo real. |
 
-Responsable de garantizar la disponibilidad y correcto funcionamiento de la plataforma.
-Monitorea métricas operativas, incidentes y el procesamiento de transacciones en tiempo real.
+#### Sistemas Externos
 
-Sistema principal
-PayFlow
+| Sistema Externo | Tipo de Componente | Responsabilidad de Integración |
+| :--- | :--- | :--- |
+| **Terminal POS** | Dispositivo Físico / Cliente | Captura la información de las credenciales de pago del tarjetahabiente en el punto de venta y despacha las peticiones de cobro hacia la plataforma. |
+| **Sistema Legado** | Aplicación Monolítica | Componente tecnológico preexistente que se mantiene operativo durante la fase de migración, asegurando la coexistencia y transferencia fluida de datos sin impactos en el negocio. |
+| **Redes de Pago** | Pasarela Externa (Visa/Mastercard/PSE) | Servicios de clearing financiero encargados de validar las reglas de negocio bancarias para emitir las respuestas finales de aprobación o rechazo transaccional. |
+| **Adquirente Bancario** | Entidad Financiera | Institución responsable del procesamiento monetario definitivo, la validación de fondos y el proceso de liquidación de las transacciones hacia los comercios. |
 
-Plataforma central de procesamiento de pagos digitales basada en una arquitectura orientada a eventos sobre Azure.
+---
 
-Sus principales responsabilidades incluyen:
+### Responsabilidades del Sistema Principal (PayFlow)
 
-Procesar transacciones digitales.
-Gestionar autorizaciones de pago.
-Publicar eventos de transacciones.
-Integrarse con redes de pago y adquirentes bancarios.
-Garantizar escalabilidad, resiliencia y disponibilidad del servicio.
-Sistemas externos
-Terminal POS
+Como núcleo de la arquitectura guiada por eventos desplegada en la infraestructura cloud, la plataforma asume las siguientes responsabilidades globales:
+* **Ingesta Distribución de Datos**: Absorber de forma concurrente solicitudes masivas de transacciones financieras digitales originadas en múltiples puntos de venta.
+* **Control del Ciclo de Vida de Autorizaciones**: Coordinar de forma orquestada la lógica de mensajería para evaluar, enrutar y validar las solicitudes de pago.
+* **Emisión y Publicación de Trazas**: Actuar como origen de eventos emitiendo notificaciones estructuradas de transacciones a través de tópicos compartidos.
+* **Integración Heterogénea**: Proveer adaptadores de comunicación estándar para enlazarse con los ecosistemas de las redes de pago y adquirentes tradicionales.
+* **Garantía de Atributos de Calidad**: Soportar de manera nativa escalabilidad horizontal automatizada, tolerancia a fallos, aislamiento de excepciones y alta disponibilidad operacional.
 
-Dispositivo utilizado en comercios para capturar la información de pago del cliente y enviar solicitudes de transacción hacia PayFlow.
+---
 
-Sistema Legado
+### Catálogo de Relaciones Principales
 
-Sistema monolítico existente que continúa operando durante el proceso de migración hacia la nueva arquitectura basada en eventos.
-Permite mantener compatibilidad e integración gradual sin afectar la operación del negocio.
-
-Redes de Pago (Visa, Mastercard, PSE)
-
-Servicios externos encargados de autorizar o rechazar transacciones digitales según las validaciones financieras correspondientes.
-
-Adquirente Bancario
-
-Entidad financiera responsable de validar, procesar y liquidar las transacciones monetarias asociadas a los pagos digitales.
-
-Relaciones principales
-Los comercios utilizan PayFlow para procesar pagos digitales.
-Los terminales POS envían solicitudes de transacción hacia PayFlow.
-PayFlow se integra con redes de pago para solicitar autorizaciones.
-Las redes de pago retornan respuestas de aprobación o rechazo.
-El adquirente bancario realiza validaciones financieras y liquidaciones.
-El sistema legado continúa intercambiando eventos y datos durante la transición tecnológica.
-Los equipos de riesgo y operaciones monitorean continuamente el comportamiento y estado de la plataforma.
+El flujo de interacción de alto nivel entre las fronteras del sistema se rige bajo los siguientes principios de comunicación:
+1. El **Comercio** canaliza e inicia el ciclo transaccional consumiendo las capacidades de procesamiento distribuidas por la plataforma.
+2. El **Terminal POS** actúa como interfaz física enviando las solicitudes técnicas de autorización hacia los componentes de entrada del backend.
+3. La plataforma interactúa mediante protocolos seguros con las **Redes de Pago** para requerir los veredictos financieros de los adquirentes bancarios.
+4. Las **Redes de Pago** retornan de manera síncrona o asíncrona la respuesta estructural de aprobación o denegación de la operación monetaria.
+5. El **Adquirente Bancario** ejecuta los procesos de compensación y liquidación monetaria final derivados de las transacciones validadas exitosamente.
+6. El **Sistema Legado** mantiene un intercambio constante de eventos informativos y sincronización de datos con la nueva plataforma para resguardar la consistencia operativa del negocio.
+7. Los equipos de **Riesgo** y **Operaciones** explotan las interfaces de monitoreo de forma transversal para auditar la salud del ecosistema y contener comportamientos fraudulentos.
 ---
 
 # C2 — Contenedores
