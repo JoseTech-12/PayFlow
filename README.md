@@ -19,12 +19,12 @@
 
 # Integrantes
 
-| Nombre | Rol |
-|---|---|
-| Integrante 1 | Arquitectura |
-| Integrante 2 | Desarrollo |
-| Integrante 3 | Documentación |
-| Integrante 4 | Monitoreo |
+| Nombre | 
+|---|
+| Jose luis Parra |
+| Isaac Gomez | 
+| Emerson Atehortua| 
+
 
 ---
 
