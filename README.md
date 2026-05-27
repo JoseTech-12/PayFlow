@@ -149,66 +149,58 @@ El diagrama C1 representa los actores principales y sistemas externos que intera
 
 ![C1](assets/c1-contexto.png)
 
-El siguiente diagrama corresponde al C4 Model – Nivel 1 (System Context Diagram) de PayFlow, una plataforma de procesamiento de pagos digitales orientada a eventos y desplegada sobre Azure.
+## C1 — Contexto
 
-El objetivo principal del sistema es permitir a los comercios recibir pagos digitales de manera segura, escalable y eficiente en países como Colombia, Ecuador y Perú.
+### Descripción del Escenario de Contexto
 
-En este nivel de arquitectura se muestran los actores y sistemas externos que interactúan con PayFlow, así como las relaciones principales entre ellos.
+El diagrama de Contexto del Sistema (Nivel 1) delimita las fronteras operacionales de la plataforma **PayFlow**, identificando de forma explícita a los actores humanos y a los sistemas externos que interactúan con el ecosistema de procesamiento de eventos distribuidos sobre la infraestructura de nube.
 
-Actores del sistema
-Comercio
+El objetivo central de la plataforma es proveer un canal seguro, altamente escalable y elástico que faculte a los comercios para la recepción y autorización de pagos digitales eficientes dentro de la región (Colombia, Ecuador y Perú), garantizando interoperabilidad táctica tanto con infraestructuras legadas como con redes financieras tradicionales.
 
-Representa a los establecimientos o negocios que utilizan la plataforma PayFlow para recibir pagos digitales de sus clientes.
-Los comercios envían solicitudes de procesamiento de pagos y reciben confirmaciones de transacciones autorizadas.
+---
 
-Equipo de Riesgo
+### Entidades y Actores Identificados
 
-Área encargada de supervisar transacciones sospechosas, alertas de fraude y comportamientos inusuales dentro de la plataforma.
-Interactúa con PayFlow para monitorear eventos relacionados con seguridad y prevención de fraude.
+#### Actores del Sistema
 
-Equipo de Operaciones
+| Actor | Alcance y Frontera Operativa |
+| :--- | :--- |
+| **Comercio** | Establecimientos comerciales y negocios afiliados que consumen los servicios de la plataforma para procesar los cobros digitales de sus clientes, emitiendo solicitudes de autorización y recibiendo notificaciones asíncronas de conformidad. |
+| **Equipo de Riesgo** | Unidad interna encargada de la gobernanza de seguridad, supervisión de transacciones anómalas, gestión de alertas de fraude financiero y auditoría de comportamiento transaccional dentro del sistema. |
+| **Equipo de Operaciones** | Responsables de la administración de la infraestructura y de velar por la alta disponibilidad de la solución mediante el monitoreo de métricas operativas y trazas lógicas en tiempo real. |
 
-Responsable de garantizar la disponibilidad y correcto funcionamiento de la plataforma.
-Monitorea métricas operativas, incidentes y el procesamiento de transacciones en tiempo real.
+#### Sistemas Externos
 
-Sistema principal
-PayFlow
+| Sistema Externo | Tipo de Componente | Responsabilidad de Integración |
+| :--- | :--- | :--- |
+| **Terminal POS** | Dispositivo Físico / Cliente | Captura la información de las credenciales de pago del tarjetahabiente en el punto de venta y despacha las peticiones de cobro hacia la plataforma. |
+| **Sistema Legado** | Aplicación Monolítica | Componente tecnológico preexistente que se mantiene operativo durante la fase de migración, asegurando la coexistencia y transferencia fluida de datos sin impactos en el negocio. |
+| **Redes de Pago** | Pasarela Externa (Visa/Mastercard/PSE) | Servicios de clearing financiero encargados de validar las reglas de negocio bancarias para emitir las respuestas finales de aprobación o rechazo transaccional. |
+| **Adquirente Bancario** | Entidad Financiera | Institución responsable del procesamiento monetario definitivo, la validación de fondos y el proceso de liquidación de las transacciones hacia los comercios. |
 
-Plataforma central de procesamiento de pagos digitales basada en una arquitectura orientada a eventos sobre Azure.
+---
 
-Sus principales responsabilidades incluyen:
+### Responsabilidades del Sistema Principal (PayFlow)
 
-Procesar transacciones digitales.
-Gestionar autorizaciones de pago.
-Publicar eventos de transacciones.
-Integrarse con redes de pago y adquirentes bancarios.
-Garantizar escalabilidad, resiliencia y disponibilidad del servicio.
-Sistemas externos
-Terminal POS
+Como núcleo de la arquitectura guiada por eventos desplegada en la infraestructura cloud, la plataforma asume las siguientes responsabilidades globales:
+* **Ingesta Distribución de Datos**: Absorber de forma concurrente solicitudes masivas de transacciones financieras digitales originadas en múltiples puntos de venta.
+* **Control del Ciclo de Vida de Autorizaciones**: Coordinar de forma orquestada la lógica de mensajería para evaluar, enrutar y validar las solicitudes de pago.
+* **Emisión y Publicación de Trazas**: Actuar como origen de eventos emitiendo notificaciones estructuradas de transacciones a través de tópicos compartidos.
+* **Integración Heterogénea**: Proveer adaptadores de comunicación estándar para enlazarse con los ecosistemas de las redes de pago y adquirentes tradicionales.
+* **Garantía de Atributos de Calidad**: Soportar de manera nativa escalabilidad horizontal automatizada, tolerancia a fallos, aislamiento de excepciones y alta disponibilidad operacional.
 
-Dispositivo utilizado en comercios para capturar la información de pago del cliente y enviar solicitudes de transacción hacia PayFlow.
+---
 
-Sistema Legado
+### Catálogo de Relaciones Principales
 
-Sistema monolítico existente que continúa operando durante el proceso de migración hacia la nueva arquitectura basada en eventos.
-Permite mantener compatibilidad e integración gradual sin afectar la operación del negocio.
-
-Redes de Pago (Visa, Mastercard, PSE)
-
-Servicios externos encargados de autorizar o rechazar transacciones digitales según las validaciones financieras correspondientes.
-
-Adquirente Bancario
-
-Entidad financiera responsable de validar, procesar y liquidar las transacciones monetarias asociadas a los pagos digitales.
-
-Relaciones principales
-Los comercios utilizan PayFlow para procesar pagos digitales.
-Los terminales POS envían solicitudes de transacción hacia PayFlow.
-PayFlow se integra con redes de pago para solicitar autorizaciones.
-Las redes de pago retornan respuestas de aprobación o rechazo.
-El adquirente bancario realiza validaciones financieras y liquidaciones.
-El sistema legado continúa intercambiando eventos y datos durante la transición tecnológica.
-Los equipos de riesgo y operaciones monitorean continuamente el comportamiento y estado de la plataforma.
+El flujo de interacción de alto nivel entre las fronteras del sistema se rige bajo los siguientes principios de comunicación:
+1. El **Comercio** canaliza e inicia el ciclo transaccional consumiendo las capacidades de procesamiento distribuidas por la plataforma.
+2. El **Terminal POS** actúa como interfaz física enviando las solicitudes técnicas de autorización hacia los componentes de entrada del backend.
+3. La plataforma interactúa mediante protocolos seguros con las **Redes de Pago** para requerir los veredictos financieros de los adquirentes bancarios.
+4. Las **Redes de Pago** retornan de manera síncrona o asíncrona la respuesta estructural de aprobación o denegación de la operación monetaria.
+5. El **Adquirente Bancario** ejecuta los procesos de compensación y liquidación monetaria final derivados de las transacciones validadas exitosamente.
+6. El **Sistema Legado** mantiene un intercambio constante de eventos informativos y sincronización de datos con la nueva plataforma para resguardar la consistencia operativa del negocio.
+7. Los equipos de **Riesgo** y **Operaciones** explotan las interfaces de monitoreo de forma transversal para auditar la salud del ecosistema y contener comportamientos fraudulentos.
 ---
 
 # C2 — Contenedores
@@ -456,52 +448,86 @@ Se seleccionó una solución nativa integrada al ecosistema cloud.
 ## Infraestructura desplegada
 
 ![Infraestructura](assets/evidencias/infraestructura.png)
+###  Inventario y Topología de la Infraestructura Desplegada
+
+Como validación final del aprovisionamiento del entorno, se adjunta el mapa de la topología física autogenerado por la plataforma, el cual certifica la existencia, interconexión y despliegue real de todos los componentes que dan soporte al procesador de pagos PayFlow.
+
+* **Cohesión y Aislamiento del Entorno (rg-payflow)**: La vista del visualizador de recursos confirma que la totalidad de los componentes tecnológicos operan de forma centralizada y acoplada dentro del mismo perímetro de administración lógico. Esto garantiza una gobernanza estricta sobre el ciclo de vida de los servicios y simplifica las políticas de seguridad perimetral.
+* **Garantía de la Arquitectura de Componentes**: El mapa lógico valida la correspondencia exacta con el modelo físico diseñado. Se constata la disponibilidad del ingestor de streaming transaccional (`payflow-namespace`), la capa de mensajería empresarial para flujos críticos de alto valor (`payflows-sbs`), el motor de cómputo elástico basado en el paradigma serverless (`payflows-functions`), el almacén distribuido sub-10ms (`payflow-cosmos`) y el nodo centralizado de observabilidad y telemetría.
+* **Mitigación de Latencia por Homogeneidad Regional**: La disposición unificada de los recursos dentro de la misma región geográfica asegura que las llamadas de dependencia internas (como la persistencia de funciones hacia el almacén NoSQL o el enrutamiento hacia las colas prioritarias) se ejecuten a través de la red troncal interna del proveedor. Esto elimina saltos interregionales innecesarios, mitigando el overhead en el tiempo de procesamiento y asegurando la estabilidad del SLA ante las 40 transacciones por segundo.
 
 ---
 
 ## Procesamiento de eventos
 
 ![Procesamiento](assets/evidencias/procesamiento.png)
+###  Validación del Comportamiento del Ingestor de Transacciones
+
+El análisis del panel de métricas de la infraestructura de mensajería confirma el correcto funcionamiento del punto de entrada ante ráfagas de tráfico masivo distribuidas por lotes.
+
+* **Validación de la Tasa Transaccional (Incoming Messages)**: El gráfico central registra picos sostenidos de entre 2.300 y 2.400 mensajes entrantes por minuto. Este volumen valida empíricamente que el script generador inyectó la carga base de 40 transacciones por segundo ($40 \text{ tx/s} \times 60 \text{ s} = 2.400 \text{ eventos}$) de forma íntegra hacia el componente de ingesta, acumulando un total de 18.400 eventos procesados con éxito en la ventana de evaluación.
+* **Eficiencia de Red mediante Lotes (Incoming Requests)**: Se evidencia el impacto del diseño asíncrono. Mientras el volumen de mensajes individuales superó los 18.400 eventos, el número de solicitudes de red se mantuvo considerablemente bajo (1.260 conexiones exitosas). Esto confirma que el empaquetado de transacciones reduce drásticamente el overhead de red y evita la saturación de los canales de comunicación.
+* **Absorción de Ráfagas y Cero Pérdida de Datos**: A pesar del comportamiento intermitente y abrupto de la carga, el indicador de errores de servidor (*Server Errors*) permaneció en cero de forma absoluta. Esto demuestra la eficacia de la retención temporal del componente, actuando como un amortiguador distribuido que protege el pipeline de cómputo backend contra picos de tráfico estacionales sin experimentar degradación del servicio.
 
 ---
 
 ## Persistencia de datos
 
 ![Persistencia](assets/evidencias/persistencia.png)
+### Validación de la Persistencia de Datos e Integridad del Almacén NoSQL
+
+Para certificar que el flujo asíncrono finaliza de forma correcta en la capa de persistencia, se auditó el contenido del almacén de datos distribuido mediante el explorador de datos nativo del componente de persistencia (`payflow-cosmos`).
+
+* **Estructura Documental Heterogénea y Enriquecida**: La captura del explorador de datos evidencia el asentamiento exitoso de los payloads en formato JSON nativo. Se constata que la capa de cómputo intermedia enriqueció el evento original proveniente del sistema legado, inyectando los atributos de control de ciclo de vida requeridos por el negocio, tales como `estado`, `prioridad` y el flag de evaluación de riesgo `sospechosa`.
+* **Optimización de la Clave de Partición**: Se verifica de forma empírica la correcta distribución horizontal de los documentos a través del atributo lógico de partición orientado por el campo identificador del comercio. Esta estrategia de diseño mitiga el riesgo de contención de rendimiento o aparición de cuellos de botella por particiones calientes durante la absorción de las 40 transacciones por segundo.
+* **Trazabilidad Extremo a Extremo**: Cada documento cuenta con la persistencia exacta de su identificador único global correlacionado (`transaction_id`) y los metadatos de auditoría del motor del proveedor de nube. Esto garantiza la persistencia definitiva de la información financiera con latencias de un solo dígito dentro del ecosistema del backend de pagos.
 
 ---
 
 ## Monitoreo
 
 ![Monitor](assets/evidencias/monitor.png)
+###  Validación del Monitoreo Centralizado y Observabilidad en Tiempo Real
 
----
+Como mecanismo de auditoría operativa, se validó el comportamiento del pipeline de datos a través de los tableros de control de telemetría y supervisión centralizada del sistema.
 
-# Matriz de control de cambios
+#### Absorción en la Capa de Mensajería
+El panel de control general confirma el comportamiento del punto de entrada al recibir las ráfagas del sistema legado. Se registra un volumen consolidado de mensajes entrantes (*Incoming Messages*) que valida la recepción íntegra del tráfico base (40 tx/s), acumulando miles de eventos exitosos en la ventana de evaluación. El indicador de errores de plataforma se mantuvo en cero de forma absoluta, demostrando la capacidad del componente para actuar como un amortiguador distribuido.
 
-| ID | Fecha | Responsable | Observación |
-|---|---|---|---|
-| RFC-01 | 2026-05-01 | Equipo | Creación inicial del repositorio |
-| RFC-02 | 2026-05-03 | Equipo | Inclusión del modelo C4 |
-| RFC-03 | 2026-05-06 | Equipo | Documentación de ADRs |
-| RFC-04 | 2026-05-09 | Equipo | Evidencias de implementación |
-| RFC-05 | 2026-05-12 | Equipo | Ajustes finales y conclusiones |
+#### Comportamiento de las Instancias de Cómputo (Métricas en Directo)
+El tablero de telemetría en tiempo real refleja el aprovisionamiento dinámico de la infraestructura. Se constata la presencia de múltiples servidores activos (*servers online*) asignados de manera elástica para evacuar el backlog del ingestor de eventos. 
+
+La dispersión en la duración de las solicitudes de entrada (*Request Duration*) demuestra que la gran mayoría de las transacciones válidas se procesan y asientan en la capa de datos en el orden de los milisegundos, cumpliendo holgadamente con el Acuerdo de Nivel de Servicio (SLA) de menos de 2 segundos. Los puntos aislados en el cuadrante superior reflejan los tiempos de inicialización inicial (*cold start*) controlados durante el arranque de la infraestructura.
+
+#### Auditoría de Resiliencia ante Datos Corruptos
+Al evaluar la robustez del procesador frente a los escenarios de fallos simulados, los registros lógicos del backend capturaron con precisión las anomalías introducidas por el escenario de transacciones inválidas (específicamente errores de tipo de dato o ausencia de atributos obligatorios como el valor de la operación). 
+
+La aparición controlada de picos en la tasa de excepciones (*Exception Rate*) coincide directamente con la inyección de cargas malformadas desde el origen. Esto certifica de manera empírica que el pipeline de validación identifica y aísla las transacciones defectuosas en la primera etapa del flujo (C3), impidiendo de forma exitosa que los datos corruptos se propaguen hacia los componentes subsiguientes de evaluación de riesgo, colas de alta prioridad o el almacén de datos definitivo.
+
 
 ---
 
 # Conclusiones
 
-- La arquitectura orientada a eventos permitió desacoplar los procesos críticos del sistema.
-- La nueva propuesta mejora la capacidad de procesamiento frente a picos de demanda.
-- El modelo planteado facilita la observabilidad y trazabilidad de transacciones.
-- La separación de responsabilidades reduce el impacto de fallos externos.
-- El enfoque serverless permite optimizar costos operativos durante el piloto.
+# 
+
+* **Validación de la Capacidad de Carga y Desacoplamiento Real**: El cambio de paradigma de una arquitectura monolítica síncrona a un modelo guiado por eventos (*Event-Driven Architecture*) demostró ser la solución definitiva para mitigar la contención de tráfico. La integración de un componente de streaming distribuido como amortiguador (*buffer*) absorbió de manera íntegra ráfagas transaccionales continuas de 40 tx/s (2.400 mensajes por minuto) sin transferir estrés hídrico de red, latencia o sobrecarga al sistema legado emisor.
+* **Cumplimiento Estricto de los Acuerdos de Nivel de Servicio (SLA)**: Los datos consolidados de telemetría confirmaron que la latencia del pipeline de cómputo se mantuvo predominantemente en la escala de milisegundos, superando con amplio margen la restricción crítica de negocio de procesar y autorizar transacciones en menos de 2 segundos. Los escasos eventos de mayor duración quedaron confinados a las fases de inicialización por arranque en frío (*cold start*), un comportamiento esperado en infraestructuras elásticas que no comprometió la ventana operativa del flujo transaccional.
+* **Eficiencia Operativa mediante el Procesamiento por Lotes (Batching)**: La configuración del disparador nativo entre el ingestor y la capa de cómputo serverless demostró que es posible procesar un volumen masivo de datos reduciendo significativamente el costo de infraestructura y el tráfico de red. Al empaquetar decenas de mensajes en ejecuciones atómicas reducidas (manteniendo picos estables de 7 a 10 activaciones de función por segundo), el sistema optimizó el uso de memoria y CPU, logrando una arquitectura de alta densidad transaccional financieramente viable.
+* **Alta Tolerancia a Fallos y Resiliencia Estructural**: La arquitectura validó empíricamente su diseño tolerante a fallos frente a cargas malformadas y fallas lógicas inyectadas intencionalmente. Al aislar las excepciones estructurales (como errores de mapeo por ausencia del atributo de monto) en la primera línea de validación de formato dentro de la capa de procesamiento, se evitó la propagación de fallas en cascada y se mantuvo una tasa de error de plataforma en cero absoluto, protegiendo la integridad del almacén de datos distribuido y los flujos de notificación asíncronos.
+* **Optimización y Escalabilidad del Almacén NoSQL**: El uso de un modelo orientado a documentos flexible y distribuido horizontalmente mediante una clave de partición lógica basada en el identificador del comercio eliminó el riesgo de aparición de particiones calientes (*hot partitions*). El sistema no solo garantizó escrituras concurrentes sub-10ms bajo escenarios de estrés, sino que demostró la flexibilidad del esquema para enriquecer dinámicamente los payloads, inyectando atributos de control como prioridad y estados de validación sin penalizar el rendimiento global.
+* **Gobernanza Completa mediante Observabilidad Proactiva**: El despliegue de un esquema de telemetría centralizado extremo a extremo permitió trascender del monitoreo reactivo tradicional a la supervisión operativa en tiempo real. La visibilidad simultánea de las colas de mensajería, la salud interna de las instancias de servidores y las trazas distribuidas dota a la organización de la capacidad para identificar cuellos de botella lógicos o anomalías de formato en un rango inferior al umbral de alerta requerido, garantizando la continuidad operativa del negocio financiero.
 
 ---
 
 # Referencias
 
-- Microsoft Azure Architecture Center
-- Arquitectura orientada a eventos
-- Documentación oficial de servicios cloud utilizados
-- Caso de estudio PayFlow
+<a id="ref-5"></a>Microsoft. Bienvenida a Azure Stream Analytics. Microsoft Learn. Disponible en: https://learn.microsoft.com/es-es/azure/stream-analytics/stream-analytics-introduction
+
+<a id="ref-6"></a>[6] Microsoft. Introducción a Azure Cosmos DB. Microsoft Learn. Disponible en: https://learn.microsoft.com/es-es/azure/cosmos-db/introduction
+
+<a id="ref-7"></a>[7] Microsoft. Documentación de Azure SQL Database. Microsoft Learn. Disponible en: https://learn.microsoft.com/es-es/azure/azure-sql/database/
+
+<a id="ref-8"></a>[8] Microsoft. Introducción a las colas de Azure Storage. Microsoft Learn. Disponible en: https://learn.microsoft.com/es-es/azure/storage/queues/storage-queues-introduction
+
+<a id="ref-9"></a>[9] Microsoft. ¿Qué es Azure Monitor? Microsoft Learn. Disponible en: https://learn.microsoft.com/es-es/azure/azure-monitor/overview
