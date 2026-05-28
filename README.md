@@ -19,12 +19,12 @@
 
 # Integrantes
 
-| Nombre | Rol |
-|---|---|
-| Integrante 1 | Arquitectura |
-| Integrante 2 | Desarrollo |
-| Integrante 3 | Documentación |
-| Integrante 4 | Monitoreo |
+| Nombre | 
+|---|
+| Jose luis Parra |
+| Isaac Gomez | 
+| Emerson Atehortua| 
+
 
 ---
 
@@ -308,125 +308,172 @@ Durante todo el recorrido, cada uno de los bloques lógicos reporta de manera as
 
 ---
 
-# ADR-01 — Punto de entrada de eventos
+# Registro de Decisiones de Arquitectura (ADRs) — Proyecto PayFlow
 
-## Contexto
-El sistema requiere soportar alto volumen de transacciones y desacoplar el sistema legado del procesamiento interno.
+## ADR-01: Azure Event Hubs vs Azure Service Bus como punto de entrada de eventos de transacciones
 
-## Alternativas evaluadas
+### Contexto
+El sistema legado de PayFlow procesa hasta 40 transacciones por segundo (tx/s) de forma síncrona. Durante temporada alta (noviembre–diciembre), el volumen puede triplicarse hasta alcanzar 260.000 transacciones diarias, lo que equivale a picos sostenidos de más de 500 tx/s. Cuando ese umbral se supera, los tiempos de respuesta escalan de 2 a más de 8 segundos, causando timeouts en los terminales POS de los comercios y pérdida directa de ventas.
 
-- Servicio orientado a mensajería empresarial
-- Plataforma orientada a streaming de eventos
+La nueva arquitectura debe recibir el flujo de eventos del sistema legado sin requerir modificaciones en él (integración no intrusiva) y actuar como buffer distribuido ante esos picos. El punto de entrada es el componente más crítico: debe absorber ráfagas de alto volumen, ser tolerante a fallos y permitir que los consumidores (Azure Functions) procesen a su propio ritmo sin bloquear la ingesta.
 
-## Decisión
-Se seleccionó una solución orientada a streaming de eventos como punto principal de entrada.
+### Alternativas evaluadas
 
-## Consecuencias
+#### Opción A — Azure Event Hubs (Seleccionada)
+Azure Event Hubs es un servicio de streaming de eventos de alto rendimiento diseñado para ingerir millones de eventos por segundo. Actúa como la puerta principal en arquitecturas event-driven, proporcionando una cola de retención configurable donde los consumidores leen eventos de forma independiente.
 
-### Ventajas
-- Mayor capacidad de escalabilidad
-- Mejor manejo de picos de carga
-- Procesamiento desacoplado
+* Throughput masivo: Escala hasta millones de eventos/seg; soporta los 500 tx/s requeridos con amplio margen.
+* Buffer distribuido: La retención de 1 día (Basic tier) protege contra caídas temporales de la capa de procesamiento (Azure Functions).
+* Compartibilidad AMQP: El sistema legado puede publicar transacciones por AMQP sin modificaciones intrusivas.
+* Integración nativa con Functions: El trigger de Event Hubs permite procesar lotes de datos eficientemente.
+* Costo optimizado: El Basic tier (1 unidad de procesamiento) se alinea con el presupuesto del piloto de $60 USD/mes.
 
-### Trade-offs
-- Menor garantía de orden global
+Desventajas: No garantiza orden estricto entre particiones de forma nativa sin llaves de partición; no tiene dead-letter queue nativa; retención máxima de 1 día en Basic tier.
 
----
+#### Opción B — Azure Service Bus como punto de entrada (Descartada)
+Azure Service Bus es un broker de mensajería empresarial orientado a mensajes individuales con garantías de orden y entrega. Si bien ofrece dead-letter queues y sesiones ordenadas, no está optimizado para absorber ráfagas continuas de streaming de alto volumen.
 
-# ADR-02 — Procesamiento de eventos
+* Límite de throughput: El Basic tier presenta degradación y overhead bajo cargas concurrentes y sostenidas de 500 tx/s.
+* Latencia de ingesta mayor: El protocolo maneja cada mensaje de forma individualizada, añadiendo latencia extrema en la fase de absorción de ráfagas.
+* Costo por operación: El modelo de precios basado en cobros por mensaje individual escala negativamente con un volumen de 85k–260k tx/día.
 
-## Contexto
-Se requiere procesamiento flexible y lógica personalizada para validaciones y reglas antifraude.
+### Decisión
+Se selecciona Azure Event Hubs como punto de entrada del sistema de procesamiento de eventos de PayFlow. Event Hubs cumple con éxito el rol de ingesta masiva (event ingestion), permitiendo una integración no intrusiva mediante AMQP con el sistema fuente, mientras que las Azure Functions procesan los lotes asíncronamente mediante suscripción declarativa.
 
-## Alternativas evaluadas
-
-- Motor administrado de análisis en tiempo real
-- Funciones serverless
-
-## Decisión
-Se seleccionó un modelo serverless para el procesamiento de eventos.
-
-## Consecuencias
-
-### Ventajas
-- Escalabilidad automática
-- Menor costo operativo
-- Flexibilidad de implementación
-
-### Trade-offs
-- Posibles latencias iniciales
+### Consecuencias
+* Ventajas obtenidas: Capacidad de absorber picos de 500 tx/s sin degradación, desacoplamiento completo entre ingesta y procesamiento, y persistencia temporal como amortiguador (buffer).
+* Trade-offs asumidos: Ausencia de orden estricto entre particiones (aceptable dado que las transacciones financieras de comercios diferentes son independientes entre sí). La falta de Dead-Letter Queue (DLQ) nativa se mitiga mediante el control de excepciones implementado en el código de Azure Functions.
 
 ---
 
-# ADR-03 — Persistencia de datos
+## ADR-02: Azure Functions vs Azure Stream Analytics para el procesamiento de cada evento de transacción
 
-## Contexto
-El sistema requiere almacenar transacciones con alta velocidad de escritura y estructura flexible.
+### Contexto
+Una vez que el evento de transacción es ingestado por Event Hubs, debe ser procesado aplicando una cadena de lógica de negocio condicional: validación de formato, evaluación antifraude en tiempo real, enrutamiento por monto y registro del resultado. Esta cadena debe completarse en menos de 2 segundos en el percentil P99 y necesita ejecutar reglas imperativas complejas (por ejemplo, detectar si el monto supera los $5.000.000 COP para enrutar a la cola de alta prioridad). El equipo de ingeniería tiene experiencia en Python, el presupuesto es ajustado ($60 USD/mes) y el procesamiento debe ser stateless para escalar horizontalmente de forma elástica.
 
-## Alternativas evaluadas
+### Alternativas evaluadas
 
-- Base de datos relacional
-- Base de datos orientada a documentos
+#### Opción A — Azure Functions (Seleccionada)
+Azure Functions es un servicio de cómputo serverless orientado a eventos. Con el trigger de Event Hubs, cada lote de transacciones activa automáticamente una instancia que ejecuta el pipeline. El plan Consumption incluye 1 millón de ejecuciones gratuitas por mes.
 
-## Decisión
-Se seleccionó un modelo orientado a documentos para la persistencia principal.
+* Lógica arbitraria imperativa: Permite codificar reglas complejas, validaciones estrictas de JSON y enrutamientos avanzados utilizando Python.
+* Escala automática: El runtime escala horizontalmente agregando instancias según el backlog acumulado en Event Hubs.
+* Costo cero en piloto: El Consumption Plan cubre la demanda del prototipo dentro de su capa gratuita.
+* Despliegue granular: Permite modularizar el flujo en componentes independientes tal como exige el modelo C3 (validar, evaluar fraude, enrutar, registrar, notificar).
 
-## Consecuencias
+Desventajas: Presencia de Cold start (~200–800 ms) ante inactividad prolongada; no está optimizado nativamente para agregaciones matemáticas en ventanas de tiempo complejas.
 
-### Ventajas
-- Flexibilidad en el esquema
-- Mejor rendimiento de escritura
+#### Opción B — Azure Stream Analytics (Descartada)
+Azure Stream Analytics es un motor de procesamiento complejo de eventos (CEP) basado en sintaxis SQL para consultas de ventana temporal y analítica continua en tiempo real.
 
-### Trade-offs
-- Menor estructura relacional
+* Limitación de lógica imperativa: Las reglas de enrutamiento condicional avanzado y las validaciones de negocio minuciosas no se expresan de forma limpia en SQL de streams.
+* Costos elevados: Requiere una tarifa mínima por unidad de streaming (~$80 USD/mes), lo cual excede el presupuesto total asignado al piloto.
 
----
+### Decisión
+Se selecciona Azure Functions en Consumption Plan como el motor de procesamiento. La lógica de PayFlow es inherentemente imperativa y estructurada por etapas independientes (C3), alineándose de forma directa con el paradigma Serverless.
 
-# ADR-04 — Procesamiento prioritario
-
-## Contexto
-Las transacciones de alto valor requieren manejo prioritario y mecanismos de reintento.
-
-## Alternativas evaluadas
-
-- Cola básica
-- Servicio avanzado de mensajería
-
-## Decisión
-Se seleccionó una solución de mensajería con soporte para reintentos y colas especializadas.
-
-## Consecuencias
-
-### Ventajas
-- Mayor confiabilidad
-- Mejor trazabilidad
-
-### Trade-offs
-- Incremento en complejidad arquitectónica
+### Consecuencias
+* Ventajas obtenidas: Pipeline altamente escalable (escala a cero si no hay transacciones), desarrollo ágil en Python y nulo impacto económico en la fase de pruebas.
+* Trade-offs asumidos: El posible impacto latente de los cold starts se asume en el piloto, siendo mitigable en producción mediante planes Premium (Always On). El monitoreo y debugging distribuido se delega por completo a Application Insights.
 
 ---
 
-# ADR-05 — Observabilidad
+## ADR-03: Azure Cosmos DB para la persistencia del estado de transacciones
 
-## Contexto
-La plataforma actual carece de monitoreo centralizado y alertas automáticas.
+### Contexto
+Cada transacción procesada por la capa de cómputo debe ser persistida con su estado final descriptivo (aprobada, rechazada, en_revision) e incluir metadatos de auditoría obligatorios. Las escrituras de alta concurrencia ocurren en momentos de máxima carga (hasta 500 tx/s en picos estacionales). Adicionalmente, el modelo de datos es heterogéneo: los campos y la estructura varían significativamente según el método de pago (Débito, Crédito, PSE, Reembolsos).
 
-## Alternativas evaluadas
+### Alternativas evaluadas
 
-- Plataforma externa de observabilidad
-- Herramientas nativas del proveedor cloud
+#### Opción A — Azure Cosmos DB (API for NoSQL) (Seleccionada)
+Azure Cosmos DB es una base de datos NoSQL distribuida globalmente que garantiza latencias de lectura y escritura inferiores a 10 ms en el percentil P99 en la misma región. Su naturaleza basada en documentos JSON mapea de forma directa con los eventos transaccionales.
 
-## Decisión
-Se seleccionó una solución nativa integrada al ecosistema cloud.
+* Latencia ultrabaja (Sub-10ms): El alto rendimiento de escritura asegura cumplir con holgura el SLA extremo a extremo de 2 segundos.
+* Esquema flexible (Schema-agnostic): Permite la coexistence nativa de payloads heterogéneos en el mismo contenedor sin necesidad de migraciones de tablas o esquemas rígidos.
+* Escala elástica de RU/s: Permite ajustar el rendimiento de forma dinámica ante picos transaccionales.
+* Integración: El uso del SDK oficial para Python facilita la persistencia directa desde la Azure Function registrarResultado.
 
-## Consecuencias
+Desventajas: Costos elevados si se configuran Request Units (RU/s) excesivas sin optimización; requiere un diseño riguroso de la clave de partición para evitar "hot partitions".
 
-### Ventajas
-- Integración sencilla
-- Menor costo operativo
+#### Opción B — Azure SQL Database (Descartada)
+Base de datos relacional tradicional basada en un motor ACID estructurado.
 
-### Trade-offs
-- Menor nivel de personalización frente a herramientas especializadas
+* Rigidez de esquema: Exige declaraciones de esquemas previas (DDL) y tablas relacionales rígidas, complicando el almacenamiento de múltiples tipos dinámicos de transacción.
+* Riesgo de bloqueo por concurrencia: Bajo cargas intensas de 500 tx/s, el bloqueo de filas y tablas relacionales genera contención, elevando la latencia por encima del umbral requerido de 2 segundos.
+
+### Decisión
+Se implementa Azure Cosmos DB (API for NoSQL) como almacén definitivo de transacciones. El contenedor se configura con la partición lógica orientada por el campo comercio_id para asegurar una distribución uniforme de la carga horizontal y maximizar la eficiencia de las Request Units (RU/s). Se cumple la restricción técnica al inyectar el campo obligatorio de auditoría diferenciada (audit_trail) para registros que superen el monto de $5.000.000 COP.
+
+### Consecuencias
+* Ventajas obtenidas: Rendimiento transaccional garantizado con latencias de escritura de milisegundos de un solo dígito y compatibilidad directa con el formato JSON nativo de los eventos.
+* Trade-offs asumidos: Se debe monitorear el consumo de RU/s desde la telemetría para evitar la aparición de excepciones de tipo 429 (Too Many Requests) si se satura el aprovisionamiento bajo la carga máxima.
+
+---
+
+## ADR-04: Azure Service Bus vs Azure Storage Queue para el enrutamiento de transacciones de alto valor
+
+### Contexto
+Las transacciones que superen un monto de $5.000.000 COP representan un riesgo crítico de negocio y requieren un canal de procesamiento diferenciado con auditoría rigurosa y entrega garantizada de tipo At-least-once. El envío de notificaciones hacia el comercio externo (Webhooks) es propenso a latencias de red y caídas del servidor destino.
+
+Para evitar cuellos de botella en el flujo transaccional masivo, el proceso de notificación debe desacoplarse completamente. Un fallo o retraso en la entrega del webhook del comercio no debe bajo ninguna circunstancia revertir o bloquear el registro de la autorización bancaria previamente asentada.
+
+### Alternativas evaluadas
+
+#### Opción A — Azure Service Bus (Seleccionada)
+Azure Service Bus es un message broker empresarial de alta confiabilidad que proporciona semánticas de mensajería avanzadas, incluyendo transaccionalidad local, reintentos con backoff exponencial y colas de mensajes fallidos (Dead-Letter Queues).
+
+* Garantía At-least-once: Asegura contractualmente que ningún mensaje financiero crítico de alto valor se pierda.
+* Mecanismo Peek-Lock: El mensaje permanece protegido en la cola y solo se elimina cuando el consumidor confirma el procesamiento exitoso. Si el consumidor falla, el mensaje vuelve a estar disponible para su reintento.
+* Dead-Letter Queue (DLQ) nativa: Si un mensaje agota los reintentos permitidos debido a una caída prolongada del comercio, se desvía de forma automática a la DLQ para auditoría manual por el equipo de riesgo, sin perder la trazabilidad.
+* Desacoplamiento asíncrono: Aísla el procesamiento pesado de notificaciones fuera del hilo principal de ejecución.
+
+Desventajas: El Basic tier limita el tamaño máximo del mensaje a 256 KB y restringe el uso de tópicos avanzados (disponibles solo en Standard), lo cual es suficiente para el alcance del piloto.
+
+#### Opción B — Azure Storage Queue (Descartada)
+Es un servicio de colas simple basado en Azure Storage, diseñado para un gran volumen de mensajes de baja criticidad.
+
+* Falta de Dead-Letter Queue nativa: Si un mensaje falla repetidamente, se requiere lógica manual compleja para evitar su pérdida o el bucle infinito de procesamiento, arriesgando la auditoría de alto valor.
+* Limitación de tamaño rígida: Soporta un tamaño máximo estricto de 64 KB, insuficiente si el payload de auditoría se expande con evidencias o firmas criptográficas complejas.
+
+### Decisión
+Se selecciona Azure Service Bus Basic Tier para gestionar la cola dedicada a las transacciones de alto valor (>5M COP).
+
+El desacoplamiento se implementa delegando de forma exclusiva la responsabilidad de la notificación externa a la función notificarComercio, la cual actúa como consumidor único de la cola de Service Bus. De esta manera, tal como se modeló en el diagrama C3, la función principal enrutarPorMonto envía la transacción de forma paralela e independiente: por un lado, se asegura el flujo de persistencia en Cosmos DB mediante registrarResultado y, por el otro, se inyecta el evento en Service Bus. Si el webhook del comercio falla o experimenta alta latencia, el registro de la transacción permanece a salvo e inalterado en la base de datos NoSQL.
+
+### Consecuencias
+* Ventajas obtenidas: Tolerancia total a fallos ante interrupciones de servicios de terceros, preservación obligatoria de pistas de auditoría financiera mediante DLQ y eliminación de cuellos de botella en la experiencia del usuario.
+* Trade-offs asumidos: El Basic tier soporta únicamente colas simples (queues) y no tópicos de publicación masiva. Si a futuro se requiere enrutar transacciones a múltiples sistemas independientes en paralelo, se deberá migrar al Standard Tier.
+
+---
+
+## ADR-05: Azure Monitor + Application Insights como solución de observabilidad centralizada
+
+### Contexto
+El sistema actual de PayFlow carece de monitoreo centralizado; los incidentes operativos son reportados manualmente por los comercios mediante canales externos como WhatsApp. La nueva arquitectura orientada a eventos distribuidos requiere un sistema automático capaz de alertar en un tiempo menor a 30 segundos ante anomalías críticas: caídas bruscas en el throughput, elevadas tasas de error HTTP o latencias en el percentil P99 que superen los 2 segundos de SLA. El monitoreo debe vigilar todo el stack y operar bajo la restricción económica del piloto, manteniendo la soberanía regulatoria de los datos financieros en el territorio estipulado.
+
+### Alternativas evaluadas
+
+#### Opción A — Azure Monitor + Application Insights (Seleccionada)
+Es el ecosistema de observabilidad nativo de Microsoft Azure. Recolecta métricas distribuidas, logs detallados y trazas de telemetría de forma nativa a través de los componentes en la nube.
+
+* Integración nativa sin agentes (Zero-Config): La telemetría se activa en las Azure Functions mediante la inyección directa de variables de entorno de instrumentación, correlacionando el ciclo de vida del evento automáticamente.
+* Alertas de baja latencia: Las alertas configuradas sobre las métricas de plataforma permiten la evaluación en tiempo real de la salud de Event Hubs, Azure Functions y Service Bus.
+* Cumplimiento de soberanía y presupuesto: Los componentes se despliegan en la misma región de infraestructura (Brazil South), asegurando el cumplimiento estricto con las directrices de la Superintendencia Financiera de Colombia respecto a la localización de datos transaccionales. Además, el consumo se mantiene a costo cero gracias a la capa gratuita de 5 GB mensuales de ingesta de logs.
+
+Desventajas: Requiere el aprendizaje de KQL (Kusto Query Language) para diagnósticos avanzados y consultas complejas en los repositorios de logs.
+
+#### Opción B — Datadog / New Relic (Descartada)
+Plataformas comerciales líderes en el sector de la observabilidad y APM empresarial.
+
+* Costos excesivos: Los planes comerciales básicos superan por completo los $60 USD/mes presupuestados para todo el piloto.
+* Fricción de cumplimiento (Soberanía de Datos): Estas soluciones de terceros exportan los logs financieros fuera del tenant privado de Azure hacia servidores externos alojados en regiones internacionales, rompiendo los lineamientos de cumplimiento con la entidad reguladora del país.
+
+### Decisión
+Se selecciona el combo nativo Azure Monitor + Application Insights centralizado en la región Brazil South. Para satisfacer el requerimiento de detección de anomalías en menos de 30 segundos, las reglas de alerta automática se configuran sobre las métricas de plataforma nativas (Métricas de Ingesta, Duración del Runtime y Recuento de Mensajes Activos), evitando la latencia de indexación que presentan las alertas basadas en análisis de logs planos.
+
+### Consecuencias
+* Ventajas obtenidas: Trazabilidad distribuida automática a lo largo de todo el ciclo de vida del evento transaccional (operation_Id compartido), visibilidad en tiempo real mediante Dashboards integrados (Workbooks) y costo operativo cero en la fase inicial del piloto.
+* Trade-offs asumidos: El equipo asume la curva de aprendizaje obligatoria sobre KQL para ejecutar consultas avanzadas dentro de las trazas del sistema, garantizando diagnósticos efectivos ante incidentes de producción.
 
 ---
 
