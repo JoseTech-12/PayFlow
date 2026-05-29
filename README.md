@@ -49,6 +49,43 @@ PayFlow es una fintech colombiana enfocada en pagos digitales para pequeños y m
 El propósito de este proyecto es diseñar una arquitectura orientada a eventos que permita mejorar el procesamiento en tiempo real, desacoplar componentes críticos, aumentar la observabilidad del sistema y soportar crecimiento en volumen transaccional.
 
 ---
+# Descripción de la empresa
+PayFlow es una fintech colombiana fundada en 2020 que ofrece una plataforma de pagos
+digitales para pequeños y medianos comercios. Opera como intermediario entre comercios,
+adquirentes bancarios y redes de pago (Visa, Mastercard, PSE), procesando transacciones de
+compra, reembolsos, pagos de servicios y transferencias entre cuentas.
+PayFlow cuenta actualmente con 28.000 comercios activos, procesa en promedio 85.000
+transacciones diarias y tiene presencia en Colombia, Ecuador y Perú. En temporada alta
+(noviembre-diciembre y semana de receso escolar) el volumen puede triplicarse, alcanzando
+hasta 260.000 transacciones en un solo día
+
+# Situación tecnológica actual y problemas identificados
+
+El sistema de procesamiento de transacciones de PayFlow fue construido en 2020 sobre una arquitectura síncrona y monolítica. Cada transacción pasa por un flujo secuencial de validación, autorización, registro y notificación que debe completarse en **menos de 3 segundos** para no generar *timeout* en el comercio.
+
+---
+
+##  Problemas Críticos Identificados
+
+Esta arquitectura presenta deficiencias estructurales que amenazan directamente la operación y el crecimiento de la plataforma:
+
+* **Cuello de botella en picos de demanda**
+  El procesador central actual maneja un máximo de **40 transacciones por segundo**. En temporada alta, cuando el volumen supera ese umbral, las transacciones comienzan a encolarse y el tiempo de respuesta supera los **8 segundos**, generando rechazos en los terminales de los comercios y pérdida de ventas.
+
+* **Sin separación entre flujos críticos y no críticos**
+  Una transacción de $500 COP y una de $50.000.000 COP pasan exactamente por el mismo proceso con la misma prioridad. Esto expone al sistema a que un alto volumen de micropagos bloquee por completo el procesamiento de transacciones de alto valor.
+
+* **Detección de fraude reactiva**
+  El sistema actual solo aplica reglas antifraude después de autorizar la transacción. Cuando se detecta una operación sospechosa, la transacción ya fue aprobada y el dinero comprometido. El equipo de riesgo opera con alertas manuales revisadas horas después.
+
+* **Observabilidad limitada**
+  No existe un sistema centralizado de monitoreo. Cuando hay problemas de procesamiento, el equipo de operaciones se entera por quejas de los comercios en *WhatsApp*, no por alertas automáticas del sistema.
+
+* **Acoplamiento fuerte entre validación y notificación**
+  Si el servicio de notificación al comercio (*webhook*) falla, la transacción completa se revierte, aunque la autorización bancaria haya sido exitosa. Esto genera inconsistencias críticas entre el estado en PayFlow y el estado real en la red de pago.
+
+
+---
 
 # Drivers Arquitectónicos
 
@@ -120,6 +157,19 @@ Evitar que fallos externos afecten el procesamiento principal.
 ### Motivación
 Detectar anomalías antes de que sean reportadas por los comercios.
 
+---
+# Restricciones del Proyecto
+
+El desarrollo y despliegue de la solución está sujeto a las siguientes condiciones normativas, técnicas y presupuestarias:
+
+* **Cumplimiento regulatorio de datos**
+  PayFlow opera bajo la regulación de la Superintendencia Financiera de Colombia. Por este motivo, todos los datos de las transacciones deben almacenarse obligatoriamente en territorio colombiano o en regiones certificadas. La región de Azure recomendada para este cumplimiento es Brazil South.
+
+* **Stack tecnológico del equipo**
+  El equipo de ingeniería cuenta con experiencia consolidada en Python y Node.js. En consecuencia, las Azure Functions requeridas por la nueva arquitectura deben implementarse exclusivamente en uno de estos dos lenguajes.
+
+* **Límite de presupuesto operativo**
+  El presupuesto asignado en Azure no debe superar los $60 USD mensuales durante la fase piloto. Para cumplir con esta restricción, se deben utilizar los *tiers* básicos de bajo costo de Event Hubs y Service Bus, los cuales son suficientes para soportar el prototipo.
 ---
 
 # Modelo C4
@@ -249,61 +299,26 @@ El diagrama C3 representa los componentes internos encargados del procesamiento 
 
 ---
 
-![C3](assets/c3-componentes.png)
-## Arquitectura de Componentes (Modelo C3)
-
-El sistema implementa una arquitectura desacoplada y guiada por eventos (Event-Driven Architecture) detallada en el archivo **c3-componentes.png**. El backend utiliza un pipeline de cómputo elástico y distribuido, estructurado para garantizar alta disponibilidad, absorción de picos de tráfico y tolerancia a fallos ante una alta demanda transaccional.
+![C3](assets/c3-IngestordeTransacciones.png)
+Este diagrama descompone el contenedor Ingestor de Transacciones, encargado de recibir los eventos publicados por el sistema legado de PayFlow mediante HTTP/AMQP. Su función principal es actuar como punto de entrada y buffer del nuevo flujo, permitiendo desacoplar el monolito del procesamiento posterior y soportar picos de demanda. Además, expone métricas de ingesta para que el módulo de observabilidad pueda monitorear volumen, errores y comportamiento del flujo de entrada.
 
 ---
-
-### Componentes del Sistema y Responsabilidades
-
-| Componente Lógico | Tipo de Componente | Responsabilidad Principal |
-| :--- | :--- | :--- |
-| **Sistema Legado PayFlow** | Sistema Externo | Origen de los datos; publica los eventos transaccionales continuamente de forma no intrusiva. |
-| **Ingestor de Transacciones** | Servicio de Streaming | Actúa como un *buffer* distribuido masivo; absorbe ráfagas de alta carga y aísla el tráfico entrante. |
-| **Procesador de Pagos Backend** | Capa de Cómputo | Componente de procesamiento compuesto por servicios independientes y especializados. |
-| **Gestor de Alta Prioridad** | Cola de Mensajería | Broker empresarial con garantía de entrega *At-least-once* para aislar flujos críticos. |
-| **Almacén de Transacciones** | Base de Datos | Repositorio persistente optimizado para escrituras concurrentes de alta velocidad y baja latencia. |
-| **Módulo de Observabilidad** | Sistema de Monitoreo | Centraliza métricas de plataforma, logs operativos y trazas distribuidas del flujo extremo a extremo.|
-
-#### Bloques Operacionales de la Capa de Cómputo
-*   **Validación de Formato**: Verifica la integridad estructural, presencia de campos obligatorios y la consistencia del mensaje entrante.
-*   **Evaluación Antifraude**: Aplica reglas de negocio y matrices de riesgo en tiempo real para mitigar fraudes financieros antes de autorizar el pago.
-*   **Enrutador por Monto**: Analiza el valor económico de la operación para segmentar el camino lógico del evento según su nivel de prioridad.
-*   **Registro de Resultados**: Guarda de forma definitiva el estado de la transacción (aprobada/rechazada) y genera las pistas de auditoría obligatorias.
-*   **Notificación al Comercio**: Consume de manera asíncrona la mensajería prioritaria para despachar alertas operativas externas.
+![C3](assets/c3-procesadorpagos.png)
+Este diagrama representa los componentes internos del Procesador de Pagos, responsable de ejecutar la lógica principal del procesamiento de eventos. Dentro de este contenedor se validan los datos de la transacción, se aplican reglas antifraude básicas, se clasifica la operación por monto y se decide si debe enviarse al canal de alta prioridad. También registra resultados en el almacén de transacciones y reporta métricas, errores y trazas al módulo de observabilidad.
 
 ---
-
-### Flujo de Procesamiento Paso a Paso 
-
-El ciclo de vida de una transacción representado en el diagrama **c3-componentes.png** se ejecuta a través de las siguientes etapas automatizadas:
-
-#### 1. Ingesta y Amortiguación de Carga
-El **Sistema Legado PayFlow** publica los eventos de transacción directamente en el **Ingestor de Transacciones**. Este componente almacena los mensajes de manera persistente y temporal, protegiendo a la capa de cómputo de saturaciones durante picos de demanda masiva y permitiendo un consumo eficiente por lotes.
-
-#### 2. Pipeline de Validación de Negocio
-El arribo de datos al ingestor dispara instantáneamente la capa de procesamiento. El evento pasa primero por el bloque de **Validación de Formato** y, una vez superados los controles de estructura, es recibido por el componente de **Evaluación Antifraude** para validar los riesgos operativos en tiempo real.
-
-#### 3. Enrutamiento Inteligente por Umbral Financiero
-El flujo consolidado llega al componente **Enrutador por Monto**, el cual evalúa el valor monetario de la transacción y bifurca el comportamiento del sistema:
-
-*   **Camino Estándar (Menor o igual al umbral base):** Se envía de forma directa al componente de **Registro de Resultados** para asentar el estado en el **Almacén de Transacciones** de manera inmediata, finalizando el ciclo principal.
-*   **Alto Valor (Mayor al umbral base):** Para salvaguardar la operación sin penalizar el rendimiento global, el sistema aplica un **desacoplamiento asíncrono** en paralelo:
-    1.  Transfiere la transacción al bloque de **Registro de Resultados** para asegurar el asiento contable en el **Almacén de Transacciones** junto con la metadata exigida de auditoría extendida.
-    2.  Simultáneamente, inyecta un evento en el **Gestor de Alta Prioridad**.
-
-#### 4. Despacho Resiliente de Notificaciones
-El componente de **Notificación al Comercio** se activa exclusivamente ante la presencia de nuevos mensajes en la cola del **Gestor de Alta Prioridad**. Su único objetivo es realizar la petición de comunicación externa de forma asíncrona hacia el endpoint del **Comercio Externo**.
-
->  **Nota de Resiliencia:** Si el servidor del comercio externo experimenta lentitud o caídas, el error queda confinado dentro de la etapa de notificación. Gracias al mecanismo de bloqueo y persistencia de la cola de mensajería, el mensaje se retiene y reintenta de manera independiente, garantizando que el flujo principal de pagos de los demás usuarios jamás se bloquee o experimente degradación de velocidad.
-
-#### 5. Observabilidad Transversal
-Durante todo el recorrido, cada uno de los bloques lógicos reporta de manera asíncrona sus métricas operativas y registros de error al **Módulo de Observabilidad**, permitiendo el alertamiento temprano ante desviaciones en los tiempos de respuesta o fallos en el ecosistema.
+![C3](assets/c3-gestornotificaciones.png)
+Este diagrama descompone el contenedor Gestor de Alta Prioridad - Notificaciones, cuya responsabilidad es administrar colas asíncronas para separar flujos críticos y no críticos. Permite manejar transacciones mayores a $5.000.000 COP por un canal diferenciado, registrar eventos de auditoría obligatoria y procesar notificaciones a comercios de forma desacoplada. Con esto se evita que una falla en las notificaciones afecte el flujo principal de autorización.
 
 ---
+![C3](assets/c3-almacentransacciones.png)
+Este diagrama muestra la estructura lógica del Almacén de Transacciones, encargado de persistir el estado final de cada transacción procesada. También conserva resultados antifraude, información de auditoría, trazabilidad y datos operativos necesarios para reconstruir el recorrido de una transacción. Su diseño permite centralizar la información clave del procesamiento sin incluir lógica de negocio, la cual permanece en el Procesador de Pagos.
 
+---
+![C3](assets/c3-moduloobservabilidad.png)
+Este diagrama descompone el Módulo de Observabilidad, responsable de centralizar métricas, logs, trazas, errores, latencia y alertas del sistema. Recibe información desde los demás contenedores para permitir el monitoreo del flujo completo de procesamiento. Su objetivo es facilitar la detección temprana de anomalías, apoyar el seguimiento del throughput y permitir que el equipo de operaciones identifique problemas antes de que impacten a los comercios
+
+---
 # Architectural Decision Records (ADRs)
 
 ---
